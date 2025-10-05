@@ -1,7 +1,6 @@
 
 #include "isa_defs.h"
 #include "assembler_defs.h"
-#include <complex.h>
 #include <ctype.h>      // For isspace, among others...
 #include <string.h>
 
