@@ -3,12 +3,75 @@
 #include <stdlib.h>
 #include <unistd.h>     // We need this one for POSIX write().
 
-// Global definition of memory and registers
+// Global definition of memory and registers.
 word_t MEMORY[MEMORY_SIZE] = {0};
 Registers REGS;
 
-// Global TRAP Dispatch Table definition
+// Global TRAP Dispatch Table definition.
 trap_handler_t TRAP_TABLE[256] = {0};
+
+
+
+// Syscall 0: read(fd, buf_offset, count).
+void trap_read_handler()
+{
+    // Okay, this is pretty much like SYS_WRITE in the sense that
+    // the arguments are pretty much the same.
+    // (Yes, even if this appears first, I think, I implemented SYS_WRITE first).
+    // POP Count (length).
+    word_t count = MEMORY[REGS.SP++];
+    // POP Buffer Offset (relative to BR).
+    word_t buf_offset = MEMORY[REGS.SP++];
+    // POP File Descriptor.
+    word_t fd = MEMORY[REGS.SP++];
+
+    int host_fd = (int)fd;
+    char temp_buffer[count]; 
+    ssize_t bytes_read = read(host_fd, temp_buffer, count);
+
+    if (bytes_read <= 0)
+    {
+        // Push the result.
+        // Here we can expect 0 for EOF, -1 for error.
+        MEMORY[--REGS.SP] = (word_t)bytes_read;
+        return;
+    }
+
+    word_t string_start_addr_words = REGS.BR + buf_offset;
+
+    word_t current_word_value = 0;
+    word_t word_index = 0;
+
+    for (ssize_t i = 0; i < bytes_read; i++) 
+    {
+        char incoming_char = temp_buffer[i];
+        
+        if (0 == (i % 2)) 
+        {
+            // High Byte.
+            word_index = i / 2;
+            current_word_value = ((word_t)incoming_char << 8) & 0xFF00;
+        } 
+        else 
+        {
+            // Low Byte.
+            current_word_value |= ((word_t)incoming_char & 0x00FF);
+            
+            // Write to memory as the word is complete now.
+            MEMORY[string_start_addr_words + word_index] = current_word_value;
+            current_word_value = 0; // We reset this for next word.
+        }
+    }
+
+    if (bytes_read % 2 != 0)
+    {
+        // If the number of bytes read is an odd number, the word would be incomplete.
+        // To prevent losing information, we will just write the partially written word.
+        MEMORY[string_start_addr_words + word_index] = current_word_value;
+    }
+
+    MEMORY[--REGS.SP] = (word_t)bytes_read; 
+}
 
 
 
@@ -16,11 +79,11 @@ trap_handler_t TRAP_TABLE[256] = {0};
 void trap_write_handler()
 {
     // The parameters are popped from the stack in the reverse order they were pushed.
-    // POP Count (length)
+    // POP Count (length).
     word_t count = MEMORY[REGS.SP++];
     // POP Buffer Offset (which is relative to BR).
     word_t buf_offset = MEMORY[REGS.SP++];
-    // POP File Descriptor
+    // POP File Descriptor.
     word_t fd = MEMORY[REGS.SP++];
 
     // Calculate the starting address in the words array.
@@ -29,35 +92,35 @@ void trap_write_handler()
     // We need a temporary buffer to hold the characters we extract.
     // The max size is 'count' characters + 1 for a potential newline + 1 for a C-string null terminator.
     char temp_buffer[count + 2];
-    word_t actual_length = count; // To track the length before hitting a null
+    word_t actual_length = count; // To track the length before hitting a null.
 
-    // Loop through the *characters* (i), extracting 2 chars per word from memory
+    // Loop through the *characters* (i), extracting 2 chars per word from memory.
     for (int i = 0; i < count; i++)
     {
-        // Calculate the word address (character index / 2)
+        // Calculate the word address (character index / 2).
         word_t word_index = i / 2;
         word_t current_word = MEMORY[string_start_addr_words + word_index];
 
         char extracted_char;
         if (0 == (i % 2))
         {
-            // Index 0, 2, 4, ...: First character of the pair (High Byte)
-            // Shift right by 8 bits to move the high byte to the low byte position, then mask
+            // Index 0, 2, 4, ...: First character of the pair (High Byte).
+            // Shift right by 8 bits to move the high byte to the low byte position, then mask.
             extracted_char = (char)((current_word >> 8) & 0xFF);
         }
         else
         {
-            // Index 1, 3, 5, ...: Second character of the pair (Low Byte)
-            // Simply mask the low 8 bits
+            // Index 1, 3, 5, ...: Second character of the pair (Low Byte).
+            // Simply mask the low 8 bits.
             extracted_char = (char)(current_word & 0xFF);
         }
 
         temp_buffer[i] = extracted_char;
 
-        // Check for null terminator (important for .STRINGZ)
+        // Check for null terminator (important for .STRING).
         if ('\0' == extracted_char)
         {
-            actual_length = i; // The actual length is up to the null terminator
+            actual_length = i; // The actual length is up to the null terminator.
             break;
         }
     }
@@ -65,25 +128,25 @@ void trap_write_handler()
     size_t write_len = actual_length;
 
 #   ifdef DEBUG_MODE
-    // Only add a newline if DEBUG_MODE is defined
+    // Only add a newline if DEBUG_MODE is defined.
     temp_buffer[actual_length] = '\n';
-    write_len += 1; // Include the newline in the length to write
+    write_len += 1; // Include the newline in the length to write.
 #   endif
     
-    // Always null-terminate the buffer for safety, even if we write a newline
+    // Always null-terminate the buffer for safety, even if we write a newline.
     temp_buffer[write_len] = '\0';
     
 
-    // Write to the file descriptor (STDOUT or STDERR)
+    // Write to the file descriptor (STDOUT or STDERR).
     if (1 == fd || 2 == fd) 
     {
-        // We use actual_length + (1 if DEBUG_MODE) to determine the length
+        // We use actual_length + (1 if DEBUG_MODE) to determine the length.
         write(fd == 1 ? STDOUT_FILENO : STDERR_FILENO, temp_buffer, write_len);
     }
-    // else, handle other file descriptors (if applicable)
+    // else, handle other file descriptors (if applicable).
 
     // The result value (number of bytes written) is pushed to the stack.
-    MEMORY[--REGS.SP] = actual_length; // Return the number of characters, excluding newline
+    MEMORY[--REGS.SP] = actual_length; // Return the number of characters, excluding newline.
 }
 
 
@@ -114,6 +177,7 @@ void initialize_trap_table()
 {
     // For now we have this one.
     // TODO: Add the implementation for more system calls.
+    TRAP_TABLE[0] = trap_read_handler;
     TRAP_TABLE[1] = trap_write_handler;
     TRAP_TABLE[2] = trap_exit_handler;
 }
