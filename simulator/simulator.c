@@ -160,11 +160,14 @@ void trap_write_handler()
     // Write to the file descriptor (STDOUT or STDERR).
     if (1 == fd || 2 == fd) 
     {
-        // We use actual_length + (1 if DEBUG_MODE) to determine the length.
+        // We use actual_length (+ 1 if DEBUG_MODE) to determine the length.
         write(fd == 1 ? STDOUT_FILENO : STDERR_FILENO, temp_buffer, write_len);
     }
     // else, handle other file descriptors.
-    write(fd, temp_buffer, write_len);
+    else
+    {
+        write(fd, temp_buffer, write_len);
+    }
 
     // ALWAYS FREE.
     free(write_str.str);
