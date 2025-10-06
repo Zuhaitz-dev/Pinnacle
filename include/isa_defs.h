@@ -27,6 +27,14 @@ extern trap_handler_t TRAP_TABLE[256];
 typedef uint16_t word_t;
 typedef int16_t sword_t;
 
+// To manage strings and length easily
+// with our helper functions.
+typedef struct
+{
+    word_t count; 
+    char   *str;
+} string_t;
+
 // In Unix-like systems, like Linux, the exit code is 1 byte long. 
 typedef uint8_t exitcode_t;
 
