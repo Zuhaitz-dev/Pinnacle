@@ -2,6 +2,7 @@
 #include "isa_defs.h"
 #include <stdlib.h>
 #include <unistd.h>     // We need this one for POSIX write().
+#include <fcntl.h>      // And we need this other one for POSIX open().
 
 // Global definition of memory and registers.
 word_t MEMORY[MEMORY_SIZE] = {0};
@@ -12,7 +13,73 @@ trap_handler_t TRAP_TABLE[256] = {0};
 
 
 
-// Syscall 0: read(fd, buf_offset, count).
+// Helper function.
+string_t unpack_string(word_t buf_offset, word_t count)
+{
+    string_t unpacked_str;
+
+    // Calculate the starting address in the words array.
+    word_t string_start_addr_words = REGS.BR + buf_offset;
+
+    // We need a temporary buffer to hold the characters we extract.
+    // The max size is 'count' characters + 1 for a potential newline + 1 for a C-string null terminator.
+    char *temp_buffer = (char*)malloc(count + 2); 
+    if (NULL == temp_buffer)
+    {
+        perror("malloc failed");
+        exit(EXIT_FAILURE);
+    }
+
+    word_t actual_length = count; // To track the length before hitting a null.
+
+    // Loop through the *characters* (i), extracting 2 chars per word from memory.
+    for (int i = 0; i < count; i++)
+    {
+        // Calculate the word address (character index / 2).
+        word_t word_index = i / 2;
+        word_t current_word = MEMORY[string_start_addr_words + word_index];
+
+        char extracted_char;
+        if (0 == (i % 2))
+        {
+            // Index 0, 2, 4, ...: First character of the pair (High Byte).
+            // Shift right by 8 bits to move the high byte to the low byte position, then mask.
+            extracted_char = (char)((current_word >> 8) & 0xFF);
+        }
+        else
+        {
+            // Index 1, 3, 5, ...: Second character of the pair (Low Byte).
+            // Simply mask the low 8 bits.
+            extracted_char = (char)(current_word & 0xFF);
+        }
+
+        temp_buffer[i] = extracted_char;
+
+        // Check for null terminator (important for .STRING).
+        if ('\0' == extracted_char)
+        {
+            actual_length = i; // The actual length is up to the null terminator.
+            break;
+        }
+    }
+
+    unpacked_str.count = actual_length;
+
+#   ifdef DEBUG_MODE
+    // Only add a newline if DEBUG_MODE is defined.
+    temp_buffer[actual_length] = '\n';
+    unpacked_str.count += 1; // Include the newline in the length to write.
+#   endif
+    
+    // Always null-terminate the buffer for safety, even if we write a newline.
+    temp_buffer[unpacked_str.count] = '\0';
+    unpacked_str.str = temp_buffer;
+
+    return unpacked_str;
+}
+
+
+// Syscall 0: read(fd, buf_offset, count);
 void trap_read_handler()
 {
     // Okay, this is pretty much like SYS_WRITE in the sense that
@@ -86,56 +153,9 @@ void trap_write_handler()
     // POP File Descriptor.
     word_t fd = MEMORY[REGS.SP++];
 
-    // Calculate the starting address in the words array.
-    word_t string_start_addr_words = REGS.BR + buf_offset;
-
-    // We need a temporary buffer to hold the characters we extract.
-    // The max size is 'count' characters + 1 for a potential newline + 1 for a C-string null terminator.
-    char temp_buffer[count + 2];
-    word_t actual_length = count; // To track the length before hitting a null.
-
-    // Loop through the *characters* (i), extracting 2 chars per word from memory.
-    for (int i = 0; i < count; i++)
-    {
-        // Calculate the word address (character index / 2).
-        word_t word_index = i / 2;
-        word_t current_word = MEMORY[string_start_addr_words + word_index];
-
-        char extracted_char;
-        if (0 == (i % 2))
-        {
-            // Index 0, 2, 4, ...: First character of the pair (High Byte).
-            // Shift right by 8 bits to move the high byte to the low byte position, then mask.
-            extracted_char = (char)((current_word >> 8) & 0xFF);
-        }
-        else
-        {
-            // Index 1, 3, 5, ...: Second character of the pair (Low Byte).
-            // Simply mask the low 8 bits.
-            extracted_char = (char)(current_word & 0xFF);
-        }
-
-        temp_buffer[i] = extracted_char;
-
-        // Check for null terminator (important for .STRING).
-        if ('\0' == extracted_char)
-        {
-            actual_length = i; // The actual length is up to the null terminator.
-            break;
-        }
-    }
-
-    size_t write_len = actual_length;
-
-#   ifdef DEBUG_MODE
-    // Only add a newline if DEBUG_MODE is defined.
-    temp_buffer[actual_length] = '\n';
-    write_len += 1; // Include the newline in the length to write.
-#   endif
-    
-    // Always null-terminate the buffer for safety, even if we write a newline.
-    temp_buffer[write_len] = '\0';
-    
+    string_t write_str = unpack_string(buf_offset, count);
+    word_t write_len = write_str.count;
+    char *temp_buffer = write_str.str;
 
     // Write to the file descriptor (STDOUT or STDERR).
     if (1 == fd || 2 == fd) 
@@ -143,10 +163,14 @@ void trap_write_handler()
         // We use actual_length + (1 if DEBUG_MODE) to determine the length.
         write(fd == 1 ? STDOUT_FILENO : STDERR_FILENO, temp_buffer, write_len);
     }
-    // else, handle other file descriptors (if applicable).
+    // else, handle other file descriptors.
+    write(fd, temp_buffer, write_len);
+
+    // ALWAYS FREE.
+    free(write_str.str);
 
     // The result value (number of bytes written) is pushed to the stack.
-    MEMORY[--REGS.SP] = actual_length; // Return the number of characters, excluding newline.
+    MEMORY[--REGS.SP] = write_len; // Return the number of characters, excluding newline.
 }
 
 
@@ -172,6 +196,39 @@ void trap_exit_handler()
 
 
 
+// Syscall 3: open(*path, flags, count);
+// Count is added as a way to actually unpack this.
+// There are other options, like mode, but let's work with this.
+void trap_open_handler()
+{
+    // POP count. If not, good luck.
+    word_t count = MEMORY[REGS.SP++];
+    // POP Flags. Check: https://man7.org/linux/man-pages/man2/open.2.html
+    word_t flags = MEMORY[REGS.SP++];
+    // POP path. We still have to process it.
+    word_t buf_offset = MEMORY[REGS.SP++];
+
+    string_t open_str = unpack_string(buf_offset, count);
+    char* temp_buffer = open_str.str;
+
+    int host_fd = open(temp_buffer, (int)flags);
+
+    // ALWAYS FREE.
+    free(open_str.str);
+
+    MEMORY[--REGS.SP] = (word_t)host_fd;
+}
+
+
+
+// Syscall 4: 
+void trap_close_handler()
+{
+    // TODO: Add definition.
+}
+
+
+
 // We have 256 options, could we expand this later if so? Yeah?
 void initialize_trap_table()
 {
@@ -180,6 +237,8 @@ void initialize_trap_table()
     TRAP_TABLE[0] = trap_read_handler;
     TRAP_TABLE[1] = trap_write_handler;
     TRAP_TABLE[2] = trap_exit_handler;
+    TRAP_TABLE[3] = trap_open_handler;
+    TRAP_TABLE[4] = trap_close_handler;
 }
 
 
