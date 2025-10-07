@@ -64,12 +64,6 @@ string_t unpack_string(word_t buf_offset, word_t count)
     }
 
     unpacked_str.count = actual_length;
-
-#   ifdef DEBUG_MODE
-    // Only add a newline if DEBUG_MODE is defined.
-    temp_buffer[actual_length] = '\n';
-    unpacked_str.count += 1; // Include the newline in the length to write.
-#   endif
     
     // Always null-terminate the buffer for safety, even if we write a newline.
     temp_buffer[unpacked_str.count] = '\0';
@@ -160,7 +154,6 @@ void trap_write_handler()
     // Write to the file descriptor (STDOUT or STDERR).
     if (1 == fd || 2 == fd) 
     {
-        // We use actual_length (+ 1 if DEBUG_MODE) to determine the length.
         write(fd == 1 ? STDOUT_FILENO : STDERR_FILENO, temp_buffer, write_len);
     }
     // else, handle other file descriptors.
@@ -646,7 +639,7 @@ void load_memory(const char *filename)
 
 
 // Main simulation loop yippee.
-void run_simulator(int start_addr)
+void run_simulator(int start_addr, FILE *log)
 {
     REGS.PC = start_addr;
 
@@ -660,10 +653,8 @@ void run_simulator(int start_addr)
         word_t prev_pc = REGS.PC;
         REGS.PC++;
 
-#       ifdef DEBUG_MODE
-            printf("PC: 0x%04X, SP: 0x%04X, Instruction: 0x%04X (opcode: 0x%X, arg: 0x%X)\n",
-                prev_pc, REGS.SP, current_instruction.raw, current_instruction.fields.opcode, current_instruction.fields.arg);
-#       endif
+        fprintf(log, "PC: 0x%04X, SP: 0x%04X, Instruction: 0x%04X (opcode: 0x%X, arg: 0x%X)\n",
+            prev_pc, REGS.SP, current_instruction.raw, current_instruction.fields.opcode, current_instruction.fields.arg);
 
         // DECODE (time to use that union we made because tomatoes).
         int opcode = current_instruction.fields.opcode;
@@ -798,15 +789,24 @@ int main(void)
 
     load_memory("a.out.bin");
 
+    FILE *log = fopen("pmv.log", "w");
+    if (NULL == log)
+    {
+        perror("FATAL: Could not open log file 'pmv.log'");
+        return EXIT_FAILURE;
+    }
+
     REGS.BR = MEMORY[0x0000];
 
-    run_simulator(CODE_START);
+    run_simulator(CODE_START, log);
 
     if (REGS.SP < INITIAL_SP)
     {
         printf("Final TOS value: %d (0x%04X)\n", (sword_t)MEMORY[REGS.SP], MEMORY[REGS.SP]);
     }
     printf("Value at BR (Data start 0x%04X): %d (0x%04X)\n", REGS.BR, (sword_t)MEMORY[REGS.BR], MEMORY[REGS.BR]);
+
+    fclose(log);
 
     return EXIT_SUCCESS;
 }

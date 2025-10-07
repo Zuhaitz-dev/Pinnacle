@@ -19,12 +19,6 @@ SIMULATOR_BIN = $(BIN_DIR)/simulator
 all: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
 	@echo "**Build Complete (Standard)**"
 
-# Target for debug build: defines DEBUG_MODE macro
-.PHONY: debug
-debug: CFLAGS += -DDEBUG_MODE
-debug: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
-	@echo "**Build Complete (DEBUG_MODE enabled)**"
-
 # Create the bin directory if it doesn't exist
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
@@ -49,5 +43,4 @@ clean:
 
 # To use:
 # make all    # for a standard build
-# make debug  # for a debug build
 # make clean  # to remove binaries and output files
