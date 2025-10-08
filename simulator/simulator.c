@@ -470,7 +470,7 @@ void run_simulator(int start_addr)
 
     printf("** Starting Simulator at 0x%04X **\n", start_addr);
 
-    // --- Computed goto dispatch table ---
+    // **Computed goto dispatch table**
     static void *dispatch_table[] = {
         [OP_ILLEGAL]   = &&op_illegal,
         [OP_ALU_LOGIC] = &&op_alu_logic,
