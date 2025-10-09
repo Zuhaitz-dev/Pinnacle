@@ -32,6 +32,13 @@ typedef int16_t sword_t;
 #   define CHECK_SP_OVERFLOW(n)  if (REGS.SP < n) { fprintf(stderr, "Stack overflow\n"); exit(EXIT_FAILURE); }
 #endif
 
+#ifndef NO_LOG
+    extern FILE *log_file;
+#   define CLOSE_LOG() fclose(log_file)
+#else
+#   define CLOSE_LOG() ((void)0)
+#endif
+
 // Memory helpers.
 static inline char GET_CHAR_FROM_WORD(word_t w, int idx)
 {

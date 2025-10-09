@@ -107,6 +107,7 @@ void execute_alu(int func_code)
 
         default:
             fprintf(stderr, "Runtime Error: Unknown ALU func code 0x%X\n", func_code);
+            CLOSE_LOG();
             exit(EXIT_FAILURE);
     }
 }
@@ -145,6 +146,7 @@ void execute_stack_op(int func_code)
 
         default:
             fprintf(stderr, "Unknown stack func 0x%X\n", func_code);
+            CLOSE_LOG();
             exit(EXIT_FAILURE);
     }
 }
@@ -225,6 +227,7 @@ void execute_branch(int func_code)
 
         default:
             fprintf(stderr, "Unknown branch func 0x%X\n", func_code);
+            CLOSE_LOG();
             exit(EXIT_FAILURE);
     }
 }

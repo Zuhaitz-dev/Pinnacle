@@ -24,6 +24,7 @@ string_t unpack_string(word_t buf_offset, word_t count)
     if (!tmp)
     {
         perror("malloc");
+        CLOSE_LOG();
         exit(EXIT_FAILURE);
     }
 
@@ -32,7 +33,11 @@ string_t unpack_string(word_t buf_offset, word_t count)
     {
         char c = GET_CHAR_FROM_WORD(MEMORY[addr + i / 2], i);
         tmp[i] = c;
-        if (c == '\0') { actual_len = i; break; }
+        if ('\0' == c)
+        {
+            actual_len = i;
+            break;
+        }
     }
     tmp[actual_len] = '\0';
 

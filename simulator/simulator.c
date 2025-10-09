@@ -5,8 +5,6 @@
 #include "instruction_handlers.h"
 #include "trap_handlers.h"
 #include <stdlib.h>
-
-
 #ifdef BENCHMARK
 #   include <time.h>
 #endif
@@ -16,23 +14,18 @@
 // Global definition of memory and registers.
 word_t MEMORY[MEMORY_SIZE] = {0};
 Registers REGS;
-exitcode_t status; // Definition of the status variable
-
-#ifndef NO_LOG
-    FILE *log_file;
-#endif
+exitcode_t status;
+FILE *log_file = NULL;
 
 #ifdef BENCHMARK
     static uint64_t instr_count = 0;
     __clock_t time_spent;
-#endif
 
-#ifdef BENCHMARK
-static inline void log_time(clock_t start, FILE* log)
-{
-    clock_t diff = clock() - start;
-    fprintf(log, "Speed calculated by clock(): %f\n", (float)diff / CLOCKS_PER_SEC);
-}
+    static inline void log_time(clock_t start, FILE* log)
+    {
+        clock_t diff = clock() - start;
+        fprintf(log, "Speed calculated by clock(): %f\n", (float)diff / CLOCKS_PER_SEC);
+    }
 #endif
 
 
@@ -121,6 +114,7 @@ fetch:
 
 op_illegal:
     fprintf(stderr, "Runtime Error: Illegal Opcode 0x%X at address 0x%04X\n", opcode, prev_pc);
+    CLOSE_LOG();
     exit(EXIT_FAILURE);
 
 op_alu_logic:
@@ -201,12 +195,15 @@ op_trap:
                     elapsed, instr_count / (elapsed * 1e6));
 #           endif
 #           endif
-            return;
+            printf("\n** SYS_EXIT at 0x%04X with status %hhu (0x%04X) **\n", prev_pc, status, status);
+            CLOSE_LOG();
+            exit(status);
         }
     }
     else
     {
         fprintf(stderr, "Runtime Error: Unknown TRAP code 0x%X at 0x%04X\n", arg, prev_pc);
+        CLOSE_LOG();
         exit(EXIT_FAILURE);
     }
     goto fetch;
@@ -225,7 +222,8 @@ op_halt:
 #   endif
 #   endif
     printf("\n** HALT at 0x%04X **\n", prev_pc);
-    return;
+    CLOSE_LOG();
+    exit(EXIT_SUCCESS);
 }
 
 
@@ -256,13 +254,8 @@ int main(void)
 
     run_simulator(CODE_START);
 
-    if (REGS.SP < INITIAL_SP)
-        printf("Final TOS value: %d (0x%04X)\n", (sword_t)MEMORY[REGS.SP], MEMORY[REGS.SP]);
-    printf("Value at BR (Data start 0x%04X): %d (0x%04X)\n", REGS.BR, (sword_t)MEMORY[REGS.BR], MEMORY[REGS.BR]);
-
-#   ifndef NO_LOG
-    fclose(log_file);
-#   endif
-
+    // We shouldn't be here.
+    // Still... Just in case.
+    CLOSE_LOG();
     return EXIT_SUCCESS;
 }
