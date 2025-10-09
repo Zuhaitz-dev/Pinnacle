@@ -19,7 +19,7 @@ benchmark()
         exit 1
     fi
     
-    ./bin/assembler "${BENCHMARK_FILE}"
+    ./bin/pasm "${BENCHMARK_FILE}"
 
     if [ $? -ne 0 ]; then
         echo "ERROR: Assembly of ${BENCHMARK_FILE} failed."
@@ -34,7 +34,7 @@ benchmark()
         echo -e "** Run nº ${counter} **" >> "${RESULTS_FILE}"
         echo "=================================================" >> "${RESULTS_FILE}"
 
-        taskset -c 0 ./bin/simulator >> "${RESULTS_FILE}" 2>&1
+        taskset -c 0 ./bin/pmv >> "${RESULTS_FILE}" 2>&1
 
         echo -e "\n**pmv.log metrics (Run ${counter})**" >> "${RESULTS_FILE}"
         cat pmv.log >> "${RESULTS_FILE}"
