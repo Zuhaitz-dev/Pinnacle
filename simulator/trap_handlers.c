@@ -98,7 +98,7 @@ void trap_write_handler()
     word_t fd = MEMORY[REGS.SP++];
 
     string_t write_str = unpack_string(buf_offset, count);
-    write((fd==1?STDOUT_FILENO:(fd==2?STDERR_FILENO:fd)), write_str.str, write_str.count);
+    write(( fd == 1 ? STDOUT_FILENO : ( fd==2 ? STDERR_FILENO : fd)), write_str.str, write_str.count);
     free(write_str.str);
     MEMORY[--REGS.SP] = write_str.count;
 }
@@ -131,7 +131,7 @@ void trap_open_handler()
     int fd;
     if (!(fd = open(open_str.str, (int)flags)))
     {
-        perror("Could not open the file.");
+        fprintf(stderr, "Could not open the file.\n");
         CLOSE_LOG();
         exit(EXIT_FAILURE);
     }
@@ -152,9 +152,9 @@ void trap_close_handler()
     // (https://man7.org/linux/man-pages/man2/close.2.html)
     // close() returns zero on success.  On error, -1 is returned, and
     // errno is set to indicate the error.
-    if (!close(fd))
+    if (close(fd) != 0)
     {
-        perror("Could not close the file.");
+        fprintf(stderr, "Could not close the file.\n");
         CLOSE_LOG();
         exit(EXIT_FAILURE);
     }
