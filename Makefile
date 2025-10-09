@@ -1,3 +1,4 @@
+
 # Project Makefile for Assembler and Simulator
 
 # =========================
@@ -11,7 +12,7 @@ BIN_DIR   = bin
 
 # Source files
 ASSEMBLER_SRC  = assembler/assembler.c
-SIMULATOR_SRC  = simulator/simulator.c
+SIMULATOR_SRCS = simulator/simulator.c simulator/instruction_handlers.c simulator/trap_handlers.c
 
 # Output binaries
 ASSEMBLER_BIN  = $(BIN_DIR)/assembler
@@ -26,10 +27,10 @@ all: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
 
 # =========================
 # Release build (optimized)
-# =========================
+# = "======================="
 .PHONY: release
 release: CFLAGS += -DNO_LOG -O3 -march=native -flto -funroll-loops -pipe
-release: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
+release: all
 	@echo "**Build Complete (Release mode)**"
 
 # =========================
@@ -41,7 +42,7 @@ benchmark: CFLAGS += \
 	-O3 -march=native -mtune=native \
 	-flto -funroll-loops -fomit-frame-pointer \
 	-fno-stack-protector -pipe
-benchmark: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
+benchmark: all
 	@echo "**Build Complete (Benchmark mode)**"
 
 # =========================
@@ -49,7 +50,7 @@ benchmark: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
 # =========================
 .PHONY: debug
 debug: CFLAGS += -g -O0
-debug: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
+debug: all
 	@echo "**Build Complete (Debug mode)**"
 
 # =========================
@@ -61,15 +62,15 @@ $(BIN_DIR):
 # =========================
 # Assembler Compilation
 # =========================
-$(ASSEMBLER_BIN): $(ASSEMBLER_SRC) $(INC_DIR)/assembler_defs.h $(INC_DIR)/isa_defs.h
-	$(CC) $(CFLAGS) -I$(INC_DIR) $< -o $@ $(LDFLAGS)
+$(ASSEMBLER_BIN): $(ASSEMBLER_SRC)
+	$(CC) $(CFLAGS) -I$(INC_DIR) $^ -o $@ $(LDFLAGS)
 	@echo "Built $(ASSEMBLER_BIN)"
 
 # =========================
 # Simulator Compilation
 # =========================
-$(SIMULATOR_BIN): $(SIMULATOR_SRC) $(INC_DIR)/isa_defs.h
-	$(CC) $(CFLAGS) -I$(INC_DIR) $< -o $@ $(LDFLAGS)
+$(SIMULATOR_BIN): $(SIMULATOR_SRCS)
+	$(CC) $(CFLAGS) -I$(INC_DIR) $^ -o $@ $(LDFLAGS)
 	@echo "Built $(SIMULATOR_BIN)"
 
 # =========================

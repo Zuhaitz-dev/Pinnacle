@@ -19,24 +19,45 @@
 // A function prototype.
 void load_memory(const char *filename);
 
+// The essential data types.
+typedef uint16_t word_t;
+typedef int16_t sword_t;
+
+// Stack macros.
+#ifdef BENCHMARK
+#   define CHECK_SP_OVERFLOW(n) ((void)0)
+#   define CHECK_SP_UNDERFLOW(n) ((void)0)
+#else
+#   define CHECK_SP_UNDERFLOW(n) if (REGS.SP + n > INITIAL_SP) { fprintf(stderr, "Stack underflow\n"); exit(EXIT_FAILURE); }
+#   define CHECK_SP_OVERFLOW(n)  if (REGS.SP < n) { fprintf(stderr, "Stack overflow\n"); exit(EXIT_FAILURE); }
+#endif
+
+// Memory helpers.
+static inline char GET_CHAR_FROM_WORD(word_t w, int idx)
+{
+    return (idx % 2 == 0) ? ((w >> 8) & 0xFF) : (w & 0xFF);
+}
+
+static inline word_t PACK_CHARS(char hi, char lo)
+{
+    return ((hi & 0xFF) << 8) | (lo & 0xFF);
+}
+
 // TRAP Table Definitions.
 typedef void (*trap_handler_t)(void);
 extern trap_handler_t TRAP_TABLE[256];
-
-// The Data Types.
-typedef uint16_t word_t;
-typedef int16_t sword_t;
 
 // To manage strings and length easily
 // with our helper functions.
 typedef struct
 {
-    word_t count; 
+    word_t count;
     char   *str;
 } string_t;
 
-// In Unix-like systems, like Linux, the exit code is 1 byte long. 
+// In Unix-like systems, like Linux, the exit code is 1 byte long.
 typedef uint8_t exitcode_t;
+extern exitcode_t status; // Use extern to declare, not define
 
 // Instruction Format Union.
 // Easy and clear decoding for both formats,
