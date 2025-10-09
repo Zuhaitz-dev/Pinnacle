@@ -128,7 +128,13 @@ void trap_open_handler()
     word_t buf_offset = MEMORY[REGS.SP++];
 
     string_t open_str = unpack_string(buf_offset, count);
-    int fd = open(open_str.str, (int)flags);
+    int fd;
+    if (!(fd = open(open_str.str, (int)flags)))
+    {
+        perror("Could not open the file.");
+        CLOSE_LOG();
+        exit(EXIT_FAILURE);
+    }
 
     // ALWAYS FREE.
     free(open_str.str);
@@ -137,10 +143,21 @@ void trap_open_handler()
 
 
 
-// Syscall 4: 
+// Syscall 4: close(fd);
 void trap_close_handler()
 {
-    // TODO: Add definition.
+    // POP fd.
+    word_t fd = MEMORY[REGS.SP++];
+
+    // (https://man7.org/linux/man-pages/man2/close.2.html)
+    // close() returns zero on success.  On error, -1 is returned, and
+    // errno is set to indicate the error.
+    if (!close(fd))
+    {
+        perror("Could not close the file.");
+        CLOSE_LOG();
+        exit(EXIT_FAILURE);
+    }
 }
 
 

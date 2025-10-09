@@ -23,20 +23,20 @@ void load_memory(const char *filename);
 typedef uint16_t word_t;
 typedef int16_t sword_t;
 
-// Stack macros.
-#ifdef BENCHMARK
-#   define CHECK_SP_OVERFLOW(n) ((void)0)
-#   define CHECK_SP_UNDERFLOW(n) ((void)0)
-#else
-#   define CHECK_SP_UNDERFLOW(n) if (REGS.SP + n > INITIAL_SP) { fprintf(stderr, "Stack underflow\n"); exit(EXIT_FAILURE); }
-#   define CHECK_SP_OVERFLOW(n)  if (REGS.SP < n) { fprintf(stderr, "Stack overflow\n"); exit(EXIT_FAILURE); }
-#endif
-
 #ifndef NO_LOG
     extern FILE *log_file;
 #   define CLOSE_LOG() fclose(log_file)
 #else
 #   define CLOSE_LOG() ((void)0)
+#endif
+
+// Stack macros.
+#ifdef BENCHMARK
+#   define CHECK_SP_OVERFLOW(n) ((void)0)
+#   define CHECK_SP_UNDERFLOW(n) ((void)0)
+#else
+#   define CHECK_SP_UNDERFLOW(n) if (REGS.SP + n > INITIAL_SP) { fprintf(stderr, "Stack underflow\n"); CLOSE_LOG(); exit(EXIT_FAILURE); }
+#   define CHECK_SP_OVERFLOW(n)  if (REGS.SP < n) { fprintf(stderr, "Stack overflow\n"); CLOSE_LOG(); exit(EXIT_FAILURE); }
 #endif
 
 // Memory helpers.
