@@ -31,5 +31,5 @@ EXIT_LOOP:
     TRAP 2      ; [0x000C]
 
 .DATA
-    ;We will use the EXIT_CODE to show the result with echo %? 
+    ;We will use the EXIT_CODE to show the result with `echo $?` 
     EXIT_CODE: .WORD 1  ; [0x000D]
