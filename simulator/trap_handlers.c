@@ -61,6 +61,13 @@ void trap_read_handler()
     // POP File Descriptor.
     word_t fd = MEMORY[REGS.SP++];
 
+    if (count > MAX_STACK_READ_SIZE)
+    {
+        fprintf(stderr, "Runtime Error: Read request of %u bytes exceeds maximum of %d\n", count, MAX_STACK_READ_SIZE);
+        CLOSE_LOG();
+        exit(EXIT_FAILURE);
+    }
+
     char tmp[count];
     ssize_t n = read((int)fd, tmp, count);
 
@@ -98,7 +105,7 @@ void trap_write_handler()
     word_t fd = MEMORY[REGS.SP++];
 
     string_t write_str = unpack_string(buf_offset, count);
-    write(( fd == 1 ? STDOUT_FILENO : ( fd==2 ? STDERR_FILENO : fd)), write_str.str, write_str.count);
+    write((1 == fd ? STDOUT_FILENO : (2 == fd ? STDERR_FILENO : fd)), write_str.str, write_str.count);
     free(write_str.str);
     MEMORY[--REGS.SP] = write_str.count;
 }
@@ -128,15 +135,16 @@ void trap_open_handler()
     word_t buf_offset = MEMORY[REGS.SP++];
 
     string_t open_str = unpack_string(buf_offset, count);
-    int fd;
-    if (!(fd = open(open_str.str, (int)flags)))
+    int fd = open(open_str.str, (int)flags);
+
+    if (fd == -1)
     {
-        fprintf(stderr, "Could not open the file.\n");
+        perror("open");
+        free(open_str.str);
         CLOSE_LOG();
         exit(EXIT_FAILURE);
     }
 
-    // ALWAYS FREE.
     free(open_str.str);
     MEMORY[--REGS.SP] = (word_t)fd;
 }
