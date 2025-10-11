@@ -4,6 +4,27 @@
 
 
 
+// Helper function.
+void ASCII_representation(const unsigned char high_char, const unsigned char low_char)
+{
+    if (isprint((unsigned char)high_char) || isprint((unsigned char)low_char))
+    {
+        printf("\t; ");
+        if (isprint((unsigned char)high_char))
+        {
+            printf("'%c'", high_char);
+        }
+        else
+        {
+            printf("  "); // To keep the alignment.
+        }
+        if (isprint((unsigned char)low_char))
+        {
+            printf(" '%c'", low_char);
+        }
+    }
+}
+
 const char* alu_arith_map[] = {
     [FUNC_ADD] = "ADD", [FUNC_SUB] = "SUB", [FUNC_MULT] = "MULT",
     [FUNC_DIV] = "DIV", [FUNC_NEG] = "NEG", [FUNC_INC]  = "INC",
@@ -11,9 +32,9 @@ const char* alu_arith_map[] = {
 };
 
 const char* alu_logic_map[] = {
-    [FUNC_NOT - 0x800] = "NOT", [FUNC_AND - 0x800] = "AND",
-    [FUNC_OR  - 0x800] = "OR",  [FUNC_XOR - 0x800] = "XOR",
-    [FUNC_SHL - 0x800] = "SHL", [FUNC_SHR - 0x800] = "SHR"
+    [FUNC_NOT - ALU_LOGIC_OP_OFFSET] = "NOT", [FUNC_AND - ALU_LOGIC_OP_OFFSET] = "AND",
+    [FUNC_OR  - ALU_LOGIC_OP_OFFSET] = "OR",  [FUNC_XOR - ALU_LOGIC_OP_OFFSET] = "XOR",
+    [FUNC_SHL - ALU_LOGIC_OP_OFFSET] = "SHL", [FUNC_SHR - ALU_LOGIC_OP_OFFSET] = "SHR"
 };
 
 const char* stack_op_map[] = {
@@ -30,13 +51,27 @@ const char* branch_map[] = {
 
 int main(int argc, char **argv)
 {
-    if (2 != argc)
+    int simple_mode = 0;
+    char *filename = NULL;
+
+    if (2 == argc)
     {
-        fprintf(stderr, "Usage: %s <binary_file.bin>\n", argv[0]);
+        filename = argv[1];
+    }
+    else if (3 == argc && 0 == strcmp(argv[1], "-s"))
+    {
+        simple_mode = 1;
+        filename = argv[2];
+    }
+    else
+    {
+        fprintf(stderr, "Usage: %s [-s] <binary_file.bin>\n", argv[0]);
+        fprintf(stderr, "  -s: Simple mode for re-assemblable output\n");
         return EXIT_FAILURE;
     }
 
-    FILE *input = fopen(argv[1], "rb");
+
+    FILE *input = fopen(filename, "rb");
     if (!input)
     {
         perror("Error opening input file");
@@ -69,75 +104,89 @@ int main(int argc, char **argv)
         uint16_t opcode = instr.fields.opcode;
         uint16_t arg    = instr.fields.arg;
         
-        printf("    [%#06X] ", pc);
-    
-        switch (opcode)
+        if (!simple_mode)
+        {
+            printf("\t[%#06X] ", pc);
+        }
+        else
+        {
+            printf("\t");
+        }
+
+        switch (__builtin_expect(opcode, OP_LDI))
         {
             case OP_ALU_LOGIC:
                 if (arg >= FUNC_NOT)
-                    printf("%s\n", alu_logic_map[arg - 0x800]);
-                    else
-                    printf("%s\n", alu_arith_map[arg]);
+                    printf("%s", alu_logic_map[arg - ALU_LOGIC_OP_OFFSET]);
+                else
+                    printf("%s", alu_arith_map[arg]);
                 break;
             case OP_STACK_OPS:
-                printf("%s\n", stack_op_map[arg]);
+                printf("%s", stack_op_map[arg]);
                 break;
             case OP_BRANCH:
-                printf("%s\n", branch_map[arg]);
+                printf("%s", branch_map[arg]);
                 break;
             case OP_LDI:
-                printf("LDI %d\n", sign_extend_12(arg));
+                printf("LDI %d", sign_extend_12(arg));
                 break;
             case OP_LOAD:
-                printf("LOAD %d\n", sign_extend_12(arg));
+                printf("LOAD %d", sign_extend_12(arg));
                 break;
             case OP_STORE:
-                printf("STORE %d\n", sign_extend_12(arg));
+                printf("STORE %d", sign_extend_12(arg));
                 break;
             case OP_JMP:
-                printf("JMP %d\n",sign_extend_12(arg));
+                printf("JMP %d", sign_extend_12(arg));
                 break;
             case OP_JAL:
-                printf("JAL %d\n", sign_extend_12(arg));
+                printf("JAL %d", sign_extend_12(arg));
                 break;
             case OP_TRAP:
-                printf("TRAP %d\n", arg);
+                printf("TRAP %d", arg);
                 break;
             case OP_RET:
-                printf("RET\n");
+                printf("RET");
                 break;
             case OP_HALT:
-                printf("HALT\n");
+                printf("HALT");
                 break;
             case OP_ILLEGAL:
             default:
-                printf("ILLEGAL (%#04X)\n", instr.raw);
+                printf("ILLEGAL");
                 break;
+        }
+        if (simple_mode)
+        {
+            printf("\n");
+        }
+        else
+        {
+            printf("\t(%#06X)\n", instr.raw);
         }
     }
 
     if (words_read > data_start_address)
     {
         printf("\n.DATA\n");
+        
         for (size_t i = data_start_address; i < words_read; ++i)
         {
             word_t current_word = MEMORY[i];
-            char high_char = GET_CHAR_FROM_WORD(current_word, 0);
-            char low_char = GET_CHAR_FROM_WORD(current_word, 1);
-
-            printf("    [%#06zX] .WORD %-6d (%#06X)", i, current_word, current_word);
-            
-            if (isprint((unsigned char)high_char) || isprint((unsigned char)low_char))
+            if (simple_mode)
             {
-                printf("\t; ");
-                if (isprint((unsigned char)high_char))
-                    printf("'%c'", high_char);
-                else
-                    printf("  "); // To keep the alignment.
-
-                if (isprint((unsigned char)low_char))
-                    printf(" '%c'", low_char);
+                printf("\t.WORD %-6d", current_word);
             }
+            else
+            {
+                printf("\t[%#06zX] .WORD %-6d (%#06X)", i, current_word, current_word);
+            }
+
+            const unsigned char high_char = GET_CHAR_FROM_WORD(current_word, 0);
+            const unsigned char low_char = GET_CHAR_FROM_WORD(current_word, 1);
+            
+            ASCII_representation(high_char, low_char);
+
             printf("\n");
         }    
     }

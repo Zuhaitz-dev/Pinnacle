@@ -117,6 +117,8 @@ enum Opcodes
     OP_HALT       = 0xF  // Format 1: Halt (Func ignored)
 };
 
+#define ALU_LOGIC_OP_OFFSET 0x800
+
 enum AluFuncs
 {
     // ARITHMETIC.
