@@ -2,8 +2,8 @@
 #include "trap_handlers.h"
 #include <unistd.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
+
+
 
 // Global TRAP Dispatch Table definition.
 trap_handler_t TRAP_TABLE[256] = {0};

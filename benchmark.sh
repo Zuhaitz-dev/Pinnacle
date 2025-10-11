@@ -6,7 +6,7 @@ BENCHMARK_FILE="examples/fibonacci.asm" # Or a different file. This is what I am
 RESULTS_FILE="results_benchmark.log"
 
 echo "Cleaning old benchmark files..."
-rm -f a.out.bin pmv.log "${RESULTS_FILE}"
+rm -f a.out.bin pvm.log "${RESULTS_FILE}"
 
 benchmark()
 {
@@ -34,12 +34,12 @@ benchmark()
         echo -e "** Run nº ${counter} **" >> "${RESULTS_FILE}"
         echo "=================================================" >> "${RESULTS_FILE}"
 
-        taskset -c 0 ./bin/pmv >> "${RESULTS_FILE}" 2>&1
+        taskset -c 0 ./bin/pvm >> "${RESULTS_FILE}" 2>&1
 
-        echo -e "\n**pmv.log metrics (Run ${counter})**" >> "${RESULTS_FILE}"
-        cat pmv.log >> "${RESULTS_FILE}"
+        echo -e "\n**pvm.log metrics (Run ${counter})**" >> "${RESULTS_FILE}"
+        cat pvm.log >> "${RESULTS_FILE}"
 
-        rm -f pmv.log
+        rm -f pvm.log
         
         counter=$(( counter + 1 ))
     done

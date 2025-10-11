@@ -4,7 +4,6 @@
 #include "isa_defs.h"
 #include "instruction_handlers.h"
 #include "trap_handlers.h"
-#include <stdlib.h>
 #ifdef BENCHMARK
 #   include <time.h>
 #endif
@@ -241,12 +240,12 @@ int main(void)
     load_memory("a.out.bin");
 
 #   ifndef NO_LOG
-        log_file = fopen("pmv.log", "w");
+        log_file = fopen("pvm.log", "w");
 #   endif
 
     if (NULL == log_file)
     {
-        perror("FATAL: Could not open log file 'pmv.log'");
+        perror("FATAL: Could not open log file 'pvm.log'");
         return EXIT_FAILURE;
     }
 

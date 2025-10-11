@@ -12,18 +12,20 @@ BIN_DIR   = bin
 PREFIX    = /usr/local
 
 # Source files
-ASSEMBLER_SRC  = assembler/assembler.c
-SIMULATOR_SRCS = simulator/simulator.c simulator/instruction_handlers.c simulator/trap_handlers.c
+ASSEMBLER_SRC    = assembler/assembler.c
+SIMULATOR_SRCS   = simulator/simulator.c simulator/instruction_handlers.c simulator/trap_handlers.c
+DISASSEMBLER_SRC = disassembler/disassembler.c
 
 # Output binaries
-ASSEMBLER_BIN  = $(BIN_DIR)/pasm
-SIMULATOR_BIN  = $(BIN_DIR)/pmv
+ASSEMBLER_BIN    = $(BIN_DIR)/pasm
+SIMULATOR_BIN    = $(BIN_DIR)/pvm
+DISASSEMBLER_BIN = $(BIN_DIR)/pdis
 
 # =========================
 # Default Target: standard build
 # =========================
 .PHONY: all
-all: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN)
+all: $(BIN_DIR) $(ASSEMBLER_BIN) $(SIMULATOR_BIN) $(DISASSEMBLER_BIN)
 	@echo "**Build Complete (Standard)**"
 
 # =========================
@@ -39,7 +41,8 @@ release: all
 # =========================
 .PHONY: benchmark
 benchmark: CFLAGS += \
-	-DBENCHMARK -DHIDE_TRACE \
+	-DBENCHMARK \
+	-DHIDE_TRACE \
 	-O3 -march=native -mtune=native \
 	-flto -funroll-loops -fomit-frame-pointer \
 	-fno-stack-protector -pipe
@@ -75,6 +78,13 @@ $(SIMULATOR_BIN): $(SIMULATOR_SRCS)
 	@echo "Built $(SIMULATOR_BIN)"
 
 # =========================
+# Disassembler Compilation
+# =========================
+$(DISASSEMBLER_BIN): $(DISASSEMBLER_SRC)
+	$(CC) $(CFLAGS) -I$(INC_DIR) $^ -o $@ $(LDFLAGS)
+	@echo "Built $(DISASSEMBLER_BIN)"
+
+# =========================
 # Install/Uninstall
 # =========================
 .PHONY: install
@@ -83,13 +93,15 @@ install: all
 	@install -d $(DESTDIR)$(PREFIX)/bin
 	@install -m 755 $(ASSEMBLER_BIN) $(DESTDIR)$(PREFIX)/bin
 	@install -m 755 $(SIMULATOR_BIN) $(DESTDIR)$(PREFIX)/bin
+	@install -m 755 $(DISASSEMBLER_BIN) $(DESTDIR)$(PREFIX)/bin
 	@echo "**Installation Complete**"
 
 .PHONY: uninstall
 uninstall:
 	@echo "Uninstalling from $(PREFIX)/bin..."
 	@rm -f $(DESTDIR)$(PREFIX)/bin/pasm
-	@rm -f $(DESTDIR)$(PREFIX)/bin/pmv
+	@rm -f $(DESTDIR)$(PREFIX)/bin/pvm
+	@rm -f $(DESTDIR)$(PREFIX)/bin/pdis
 	@echo "**Uninstallation Complete**"
 
 # =========================

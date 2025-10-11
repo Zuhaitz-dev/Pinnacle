@@ -50,6 +50,13 @@ static inline word_t PACK_CHARS(char hi, char lo)
     return ((hi & 0xFF) << 8) | (lo & 0xFF);
 }
 
+static inline sword_t sign_extend_12(int val)
+{
+    if (val & 0x0800)
+        return (sword_t)(val | 0xF000);
+    return (sword_t)val;
+}
+
 // TRAP Table Definitions.
 typedef void (*trap_handler_t)(void);
 extern trap_handler_t TRAP_TABLE[256];
