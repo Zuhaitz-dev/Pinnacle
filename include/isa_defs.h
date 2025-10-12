@@ -25,7 +25,7 @@ typedef int16_t sword_t;
 
 #ifndef NO_LOG
     extern FILE *log_file;
-#   define CLOSE_LOG() fclose(log_file)
+#   define CLOSE_LOG() do { if (log_file) fclose(log_file); } while(0)
 #else
 #   define CLOSE_LOG() ((void)0)
 #endif
@@ -60,14 +60,6 @@ static inline sword_t sign_extend_12(int val)
 // TRAP Table Definitions.
 typedef void (*trap_handler_t)(void);
 extern trap_handler_t TRAP_TABLE[256];
-
-// To manage strings and length easily
-// with our helper functions.
-typedef struct
-{
-    word_t count;
-    char   *str;
-} string_t;
 
 // In Unix-like systems, like Linux, the exit code is 1 byte long.
 typedef uint8_t exitcode_t;

@@ -1,5 +1,6 @@
 
 #include "trap_handlers.h"
+#include "string_utils.h"
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -17,75 +18,35 @@ void trap_close_handler(void);
 
 
 
-string_t unpack_string(word_t buf_offset, word_t count)
-{
-    word_t addr = REGS.BR + buf_offset;
-    char *tmp = malloc(count + 1);
-    if (!tmp)
-    {
-        perror("malloc");
-        CLOSE_LOG();
-        exit(EXIT_FAILURE);
-    }
-
-    word_t actual_len = count;
-    for (word_t i = 0; i < count; i++)
-    {
-        char c = GET_CHAR_FROM_WORD(MEMORY[addr + i / 2], i);
-        tmp[i] = c;
-        if ('\0' == c)
-        {
-            actual_len = i;
-            break;
-        }
-    }
-    tmp[actual_len] = '\0';
-
-    string_t res = { .str = tmp, .count = actual_len };
-    return res;
-}
-
-
-
 // Syscall 0: read(fd, buf_offset, count);
 void trap_read_handler()
 {
     CHECK_SP_UNDERFLOW(3);
-    // Okay, this is pretty much like SYS_WRITE in the sense that
-    // the arguments are pretty much the same.
-    // (Yes, even if this appears first, I think, I implemented SYS_WRITE first).
-    // POP Count (length).
-    word_t count = MEMORY[REGS.SP++];
+    // POP Max Count to read.
+    word_t max_count = MEMORY[REGS.SP++];
     // POP Buffer Offset (relative to BR).
     word_t buf_offset = MEMORY[REGS.SP++];
     // POP File Descriptor.
     word_t fd = MEMORY[REGS.SP++];
 
-    if (count > MAX_STACK_READ_SIZE)
+    if (max_count > MAX_STACK_READ_SIZE)
     {
-        fprintf(stderr, "Runtime Error: Read request of %u bytes exceeds maximum of %d\n", count, MAX_STACK_READ_SIZE);
+        fprintf(stderr, "Runtime Error: Read request of %u bytes exceeds maximum of %d\n", max_count, MAX_STACK_READ_SIZE);
         CLOSE_LOG();
         exit(EXIT_FAILURE);
     }
 
-    char tmp[count];
-    ssize_t n = read((int)fd, tmp, count);
+    char tmp[max_count];
+    ssize_t n = read((int)fd, tmp, max_count);
 
-    if (n <= 0)
+    if (n < 0)
     {
         MEMORY[--REGS.SP] = (word_t)n;
         return;
     }
 
-    word_t addr = REGS.BR + buf_offset;
-    for (ssize_t i = 0; i < n; i++)
-    {
-        word_t idx = i / 2;
-        if (0 == i % 2)
-            MEMORY[addr + idx] = (tmp[i] & 0xFF) << 8; 
-        else
-            MEMORY[addr + idx] |= (tmp[i] & 0xFF);
-    }
+    // Pack the buffer into memory, including the length prefix.
+    buf_pack(tmp, buf_offset, n);
 
     MEMORY[--REGS.SP] = (word_t)n;
 }
@@ -95,16 +56,13 @@ void trap_read_handler()
 // Syscall 1: write(fd, buf_offset, count);
 void trap_write_handler()
 {
-    CHECK_SP_UNDERFLOW(3);
-    // The parameters are popped from the stack in the reverse order they were pushed.
-    // POP Count (length).
-    word_t count = MEMORY[REGS.SP++];
-    // POP Buffer Offset (which is relative to BR).
+    CHECK_SP_UNDERFLOW(2);
+    // POP Buffer Offset (relative to BR).
     word_t buf_offset = MEMORY[REGS.SP++];
     // POP File Descriptor.
     word_t fd = MEMORY[REGS.SP++];
 
-    string_t write_str = unpack_string(buf_offset, count);
+    string_t write_str = str_unpack(buf_offset);
     write((1 == fd ? STDOUT_FILENO : (2 == fd ? STDERR_FILENO : fd)), write_str.str, write_str.count);
     free(write_str.str);
     MEMORY[--REGS.SP] = write_str.count;
@@ -126,18 +84,16 @@ void trap_exit_handler()
 // There are other options, like mode, but let's work with this.
 void trap_open_handler()
 {
-    CHECK_SP_UNDERFLOW(3);
-    // POP count. If not, good luck.
-    word_t count = MEMORY[REGS.SP++];
+    CHECK_SP_UNDERFLOW(2);
     // POP Flags. Check: https://man7.org/linux/man-pages/man2/open.2.html
     word_t flags = MEMORY[REGS.SP++];
     // POP path. We still have to process it.
     word_t buf_offset = MEMORY[REGS.SP++];
 
-    string_t open_str = unpack_string(buf_offset, count);
+    string_t open_str = str_unpack(buf_offset);
     int fd = open(open_str.str, (int)flags);
 
-    if (fd == -1)
+    if (-1 == fd)
     {
         perror("open");
         free(open_str.str);

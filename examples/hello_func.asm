@@ -16,9 +16,6 @@
     ; (MESSAGE is at offset 1 relative to BR)
     LDI 1   ; [0x0004]. Stack: [LR, fd, buf_addr]
 
-    ; PUSH Count (16 characters)
-    LDI 16  ; [0x0005]. Stack: [LR, fd, buf_addr, count]
-
     ; Execute the syscall
     TRAP 1  ; [0x0006]. Stack: [LR]
 
@@ -31,7 +28,4 @@
         ; Offset 0 (Used by TRAP 2/EXIT).
         ; You can write here, but... It's reserved.
     MESSAGE:    .STRING "Hello, everyone!"
-        ; Message is 16 chars long
-        ; It will take 9 words (2 characters per word + null terminator char).
-
-
+        ; Message is 16 chars long.

@@ -12,8 +12,8 @@ BIN_DIR   = bin
 PREFIX    = /usr/local
 
 # Source files
-ASSEMBLER_SRC    = assembler/assembler.c
-SIMULATOR_SRCS   = simulator/simulator.c simulator/instruction_handlers.c simulator/trap_handlers.c
+ASSEMBLER_SRC    = assembler/assembler.c common/string_utils.c
+SIMULATOR_SRCS   = simulator/simulator.c simulator/instruction_handlers.c simulator/trap_handlers.c common/string_utils.c
 DISASSEMBLER_SRC = disassembler/disassembler.c
 
 # Output binaries

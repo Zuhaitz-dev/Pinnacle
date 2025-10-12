@@ -38,7 +38,7 @@ void execute_alu(int func_code)
 
         case FUNC_DIV:
             CHECK_SP_UNDERFLOW(2);
-            if (__builtin_expect(s_tos == 0, 0)) {
+            if (__builtin_expect(0 == s_tos, 0)) {
                 fprintf(stderr, "Divide by zero.\n");
                 exit(EXIT_FAILURE);
             }

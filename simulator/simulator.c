@@ -42,8 +42,6 @@ void load_memory(const char *filename)
         exit(EXIT_FAILURE); 
     }
 
-    // Reads the entire 64K memory image written by the assembler
-    // Yeah, this reads more than you this whole year.
     size_t words_read = fread(MEMORY, sizeof(word_t), MEMORY_SIZE, f);
 
     if (words_read > 0)

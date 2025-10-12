@@ -1,6 +1,7 @@
 
 #include "isa_defs.h"
 #include "assembler_defs.h"
+#include "string_utils.h"
 #include <ctype.h>      // For isspace, among others...
 #include <string.h>
 
@@ -87,26 +88,18 @@ word_t pack_string(const char *str, word_t start_address)
     size_t len = strlen(str);
     word_t words_written = 0;
 
+    // First, write the length of the string as the first word.
+    MEMORY[start_address] = (word_t)len;
+    words_written++;
+
     // Loop through the characters, incrementing by 2 each time.
     // We loop up to len because the final iteration is needed to handle the
     // explicit null-terminator word (0x0000) if the string has an even length.
-    for (size_t i = 0; ; i += 2)
+    for (size_t i = 0; i < len; i += 2)
     {
         
-        char c1 = '\0'; // Character 1 (high byte).
-        char c2 = '\0'; // Character 2 (low byte / null terminator).
-
-        // We get the first character (high byte).
-        if (i < len)
-        {
-            c1 = str[i];
-        }
-        
-        // We get second character (low byte).
-        if (i + 1 < len)
-        {
-            c2 = str[i + 1];
-        } 
+        char c1 = str[i];
+        char c2 = (i + 1 < len) ? str[i + 1] : 0;
         
         // If i == len (even length string), c1 and c2 are '\0', resulting in 0x0000.
         // If i == len - 1 (odd length string), c1 is the last char, c2 is '\0'.
@@ -115,12 +108,6 @@ word_t pack_string(const char *str, word_t start_address)
         // We write the packed string in memory.
         MEMORY[start_address + words_written] = packed_word;
         words_written++;
-        
-        // The loop is done once we have processed the last word (including '\0').
-        if (i >= len)
-        {
-            break; 
-        }
     }
     
     return words_written;
@@ -268,7 +255,7 @@ int main(int argc, char **argv)
                 }
                 *end_quote = '\0'; 
                 
-                word_t words_used = pack_string(start_quote, current_address);
+                word_t words_used = str_pack(start_quote, current_address);
 
                 current_address += words_used;
 
