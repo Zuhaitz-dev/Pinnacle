@@ -5,10 +5,10 @@
 #include <ctype.h>      // For isspace, among others...
 #include <string.h>
 
-// Global defintion of memory and registers.
-// We use it here to build the memory image :p.
 word_t MEMORY[MEMORY_SIZE] = {0};
 Registers REGS;
+
+exitcode_t status = EXIT_SUCCESS;
 
 const MnemonicMap INSTRUCTION_MAP[] = {
     // ALU (Format 1, uses FUNC_ code, no operand check needed).
@@ -76,41 +76,6 @@ word_t encode_format1(int opcode, int func)
     word_t encoded_op    = ((word_t)opcode) << 12;
     word_t encoded_func = ((word_t)func) & 0x0FFF;
     return encoded_op | encoded_func;
-}
-
-
-
-// THis would pack a string into memory, 2 characters per word, null-terminated.
-// The first char is the High Byte, the second is the Low Byte.
-// Returns the number of words written.
-word_t pack_string(const char *str, word_t start_address)
-{
-    size_t len = strlen(str);
-    word_t words_written = 0;
-
-    // First, write the length of the string as the first word.
-    MEMORY[start_address] = (word_t)len;
-    words_written++;
-
-    // Loop through the characters, incrementing by 2 each time.
-    // We loop up to len because the final iteration is needed to handle the
-    // explicit null-terminator word (0x0000) if the string has an even length.
-    for (size_t i = 0; i < len; i += 2)
-    {
-        
-        char c1 = str[i];
-        char c2 = (i + 1 < len) ? str[i + 1] : 0;
-        
-        // If i == len (even length string), c1 and c2 are '\0', resulting in 0x0000.
-        // If i == len - 1 (odd length string), c1 is the last char, c2 is '\0'.
-        word_t packed_word = ((word_t)c1 << 8) | (word_t)c2;
-        
-        // We write the packed string in memory.
-        MEMORY[start_address + words_written] = packed_word;
-        words_written++;
-    }
-    
-    return words_written;
 }
 
 
@@ -228,6 +193,7 @@ int main(int argc, char **argv)
                 if (fields < 2)
                 {
                     fprintf(stderr, "Error: .WORD missing value at address 0x%04X\n", current_address);
+                    status = EXIT_FAILURE;
                     break;
                 }
                 MEMORY[current_address++] = (word_t)operand;
@@ -244,6 +210,7 @@ int main(int argc, char **argv)
                 if (!start_quote)
                 {
                     fprintf(stderr, "Error: .STRING missing opening quote.\n");
+                    status = EXIT_FAILURE;
                     break;
                 }
                 start_quote++;
@@ -251,6 +218,7 @@ int main(int argc, char **argv)
                 if (!end_quote)
                 {
                     fprintf(stderr, "Error: .STRING missing closing quote.\n");
+                    status = EXIT_FAILURE;
                     break;
                 }
                 *end_quote = '\0'; 
@@ -266,7 +234,8 @@ int main(int argc, char **argv)
             }
             else
             {
-                fprintf(stderr, "Unknown data directive: %s\n", mnemonic);
+                fprintf(stderr, "Error: Unknown data directive: %s\n", mnemonic);
+                status = EXIT_FAILURE;
                 break;
             }
         } 
@@ -288,30 +257,56 @@ int main(int argc, char **argv)
 
             if (!map_entry)
             {
+                fprintf(stderr, "Error: Unknown instruction mnemonic '%s' at address 0x%04X\n", mnemonic, current_address);
+                status = EXIT_FAILURE;
                 instruction_word = encode_format1(OP_ILLEGAL, 0); 
             }
             else
             {
-                if (map_entry->requires_operand && fields < 2) 
+                if (map_entry->requires_operand)
                 {
-                    fprintf(stderr, "Instruction %s missing operand at address 0x%04X\n", mnemonic, current_address); 
-                    // We can skip writing the instruction, but writing an ILLEGAL one seems better.
-                    instruction_word = encode_format1(OP_ILLEGAL, 0); 
-                }  
-                else 
+                    // Operand is required (TYPE_FORMAT2).
+                    if (fields < 2) 
+                    {
+                        // Error: missing operand.
+                        fprintf(stderr, "Error: Instruction %s missing operand at address 0x%04X\n", mnemonic, current_address);
+                        status = EXIT_FAILURE;
+                        instruction_word = encode_format1(OP_ILLEGAL, 0); 
+                    }  
+                    else 
+                    {
+                        // Warning for 12-bit truncation (user requested change).
+                        // Range checked: [-2048, 4095] to cover both signed and unsigned 12-bit limits.
+                        if (operand > 4095 || operand < -2048)
+                        {
+                            word_t truncated_operand = ((word_t)operand) & 0x0FFF;
+                            fprintf(stderr, "Warning: Operand value '%d' for instruction '%s' at address 0x%04X exceeds 12-bit range. It will be truncated to %u (0x%03X).\n",
+                                    operand, mnemonic, current_address, truncated_operand, truncated_operand);                        }
+                        
+                        // Encoding time!
+                        instruction_word = encode_format2(map_entry->opcode, operand); 
+                    }
+                }
+                else // Operand not required (TYPE_FORMAT1, TYPE_NO_FUNC).
                 {
-                    // Encoding time!
+                    if (fields >= 2) 
+                    {
+                        // Warning for extraneous operand.
+                        fprintf(stderr, "Warning: Operand '%d' for instruction '%s' at address 0x%04X will be ignored.\n", operand, mnemonic, current_address);
+                    }
+                    
+                    // Encoding time...
                     switch (map_entry->type) 
                     {
                         case TYPE_FORMAT1:
                             instruction_word = encode_format1(map_entry->opcode, map_entry->func_code);
                             break;
                         case TYPE_FORMAT2:
-                            // operand is already parsed into an integer
-                            instruction_word = encode_format2(map_entry->opcode, operand); 
+                            // Should not happen as requires_operand is 0.
+                            instruction_word = encode_format1(OP_ILLEGAL, 0); 
                             break;
                         case TYPE_NO_FUNC:
-                            // FUNC is 0 for HALT and ILLEGAL
+                            // FUNC is 0 for HALT and RET
                             instruction_word = encode_format1(map_entry->opcode, 0); 
                             break;
                     }
@@ -357,5 +352,5 @@ int main(int argc, char **argv)
     fprintf(stdout, "Assembly complete. Wrote memory image (%zu bytes) to a.out.bin\n", 
             words_written * sizeof(word_t));
 
-    return EXIT_SUCCESS;
+    return status;
 }
