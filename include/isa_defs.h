@@ -123,13 +123,13 @@ enum AluFuncs
     FUNC_DEC  = 0x006,
     FUNC_ABS  = 0x007,
     // LOGIC
-    FUNC_NOT  = 0x800,
-    FUNC_AND  = 0x801,
-    FUNC_OR   = 0x802,
-    FUNC_XOR  = 0x803,
+    FUNC_NOT  = 0x008,
+    FUNC_AND  = 0x009,
+    FUNC_OR   = 0x00A,
+    FUNC_XOR  = 0x00B,
     // SHIFT
-    FUNC_SHL  = 0x804,
-    FUNC_SHR  = 0x805
+    FUNC_SHL  = 0x00C,
+    FUNC_SHR  = 0x00D
 };
 
 enum StackOpsFuncs

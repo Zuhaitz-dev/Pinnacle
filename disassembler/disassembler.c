@@ -25,16 +25,12 @@ void ASCII_representation(const unsigned char high_char, const unsigned char low
     }
 }
 
-const char* alu_arith_map[] = {
+const char* alu_map[] = {
     [FUNC_ADD] = "ADD", [FUNC_SUB] = "SUB", [FUNC_MULT] = "MULT",
     [FUNC_DIV] = "DIV", [FUNC_NEG] = "NEG", [FUNC_INC]  = "INC",
-    [FUNC_DEC] = "DEC", [FUNC_ABS] = "ABS"
-};
-
-const char* alu_logic_map[] = {
-    [FUNC_NOT - ALU_LOGIC_OP_OFFSET] = "NOT", [FUNC_AND - ALU_LOGIC_OP_OFFSET] = "AND",
-    [FUNC_OR  - ALU_LOGIC_OP_OFFSET] = "OR",  [FUNC_XOR - ALU_LOGIC_OP_OFFSET] = "XOR",
-    [FUNC_SHL - ALU_LOGIC_OP_OFFSET] = "SHL", [FUNC_SHR - ALU_LOGIC_OP_OFFSET] = "SHR"
+    [FUNC_DEC] = "DEC", [FUNC_ABS] = "ABS", [FUNC_NOT]  = "NOT",
+    [FUNC_AND] = "AND", [FUNC_OR]  = "OR",  [FUNC_XOR]  = "XOR",
+    [FUNC_SHL] = "SHL", [FUNC_SHR] = "SHR"
 };
 
 const char* stack_op_map[] = {
@@ -116,10 +112,7 @@ int main(int argc, char **argv)
         switch (__builtin_expect(opcode, OP_LDI))
         {
             case OP_ALU_LOGIC:
-                if (arg >= FUNC_NOT)
-                    printf("%s", alu_logic_map[arg - ALU_LOGIC_OP_OFFSET]);
-                else
-                    printf("%s", alu_arith_map[arg]);
+                printf("%s", alu_map[arg]);
                 break;
             case OP_STACK_OPS:
                 printf("%s", stack_op_map[arg]);

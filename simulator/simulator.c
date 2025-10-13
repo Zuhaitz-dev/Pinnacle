@@ -86,7 +86,6 @@ fetch:
     instr_count++;
 #   endif
 
-    // FETCH
     Instruction current_instruction;
     current_instruction.raw = MEMORY[REGS.PC];
     word_t prev_pc = REGS.PC;
