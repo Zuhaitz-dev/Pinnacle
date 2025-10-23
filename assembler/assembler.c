@@ -112,7 +112,8 @@ int main(int argc, char **argv)
 
     char line[512];
     char mnemonic[16];
-    int operand;
+    char operand_str[100];
+    int  operand = 0;
 
     MnemonicMap *map_entry = NULL;
 
@@ -167,11 +168,28 @@ int main(int argc, char **argv)
         }
 
         // Parse the mnemonic and the operand.
-        int fields = sscanf(p, "%15s %i", mnemonic, &operand);
+        int fields = sscanf(p, "%15s %99s", mnemonic, operand_str);
 
         if (fields < 1)
         {
             continue;
+        }
+
+        // So, you can use different bases.
+        // By default you can use decimal, hexadecimal and octal.
+        // Binary is not a default format, so that is why this exists.
+        // Pretty trivial, strtol does the magic.
+        // https://man7.org/linux/man-pages/man3/strtol.3.html
+        if (2 == fields)
+        {
+            if (0 == strncmp(operand_str, "0b", 2))
+            {
+                operand = (int)strtol(operand_str + 2, NULL, 2);
+            }
+            else
+            {
+                operand = (int)strtol(operand_str, NULL, 0);
+            }
         }
 
         if (0 == strcmp(mnemonic, ".DATA"))
@@ -196,6 +214,7 @@ int main(int argc, char **argv)
                     status = EXIT_FAILURE;
                     break;
                 }
+
                 MEMORY[current_address++] = (word_t)operand;
                 
                 if (current_address > max_address_written)
