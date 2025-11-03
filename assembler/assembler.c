@@ -4,6 +4,7 @@
 #include "string_utils.h"
 #include <ctype.h>      // For isspace, among others...
 #include <string.h>
+#include <errno.h>
 
 word_t MEMORY[MEMORY_SIZE] = {0};
 Registers REGS;
@@ -54,9 +55,50 @@ const MnemonicMap INSTRUCTION_MAP[] = {
 
 const size_t INSTRUCTION_COUNT = sizeof(INSTRUCTION_MAP) / sizeof(INSTRUCTION_MAP[0]);
 
+Symbol SYMBOL_TABLE[MAX_SYMBOLS];
+int symbol_count = 0;
+word_t data_section_start_address = 0;
+
+void add_symbol(const char* name, word_t address)
+{
+    if (symbol_count >= MAX_SYMBOLS)
+    {
+        fprintf(stderr, "Error: Symbol table full. Max %d symbols.\n", MAX_SYMBOLS);
+        status = EXIT_FAILURE;
+        return;
+    }    
+
+    for (int i = 0; i < symbol_count; ++i)
+    {
+        if (0 == strcmp(SYMBOL_TABLE[i].name, name))
+        {
+            fprintf(stderr, "Error: Duplicate label definition '%s' at 0x%04X\n", name, address);
+            status = EXIT_FAILURE;
+            return;
+        }
+    }
+
+    strncpy(SYMBOL_TABLE[symbol_count].name, name, MAX_LABEL_LEN - 1);
+    SYMBOL_TABLE[symbol_count].name[MAX_LABEL_LEN - 1] = '\0';
+    SYMBOL_TABLE[symbol_count].address = address;
+    symbol_count++;
+}
+
+
+
+Symbol* find_symbol(const char* name)
+{
+    for (int i = 0; i < symbol_count; ++i)
+    {
+        if (0 == strcmp(SYMBOL_TABLE[i].name, name))
+        {
+            return &SYMBOL_TABLE[i];
+        }
+    }
+    return NULL;
+}
+
 // The helper functions for encoding:
-
-
 
 // For a Format 2 instruction,
 // (Opcode + 12-bit immediate/offset/syscall code).
@@ -80,20 +122,56 @@ word_t encode_format1(int opcode, int func)
 
 
 
+char* clean_line(char* line) {
+    // Remove comments
+    char *hash_comment = strchr(line, '#');
+    char *semicolon_comment = strchr(line, ';');
+    char *comment_start = NULL;
+
+    if (hash_comment && semicolon_comment) 
+    {
+        comment_start = (hash_comment < semicolon_comment) 
+                        ? hash_comment : semicolon_comment;
+    } 
+    else if (hash_comment)
+    {
+        comment_start = hash_comment;
+    } 
+    else if (semicolon_comment)
+    {
+        comment_start = semicolon_comment;
+    }
+    if (comment_start)
+    {
+        *comment_start = '\0';
+    }
+
+    // Trim the leading whitespace
+    char *p = line;
+    while (*p && isspace(*p))
+    {
+        p++;
+    }
+
+    // Skip empty lines
+    if ('\0' == *p)
+    {
+        return NULL;
+    }
+    return p;
+}
+
+
+
 // The main assembler logic.
 int main(int argc, char **argv)
 {
-    // We could change this once we can actually assemble 
-    // more than one .asm file per time, but that's gonna take
-    // some work. Still, I will add a TODO for this possible
-    // future ticket, you know :/.
     if (argc != 2)
     {
         fprintf(stderr, "Usage: %s <assembly_file.asm>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    // THE SETUPPPPP
     FILE *input = fopen(argv[1], "r");
     if (!input)
     {
@@ -101,101 +179,55 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    // Originally it was fixed, but to make tiny binaries
-    // we will calculate it dynamically.
-    // REGS.BR = 0x2000;
-
-    word_t current_address = CODE_START;
-    int data_mode = 0;  // CODE = 0, DATA = 1 
-
-    word_t max_address_written = 0;
+    fprintf(stdout, "** Assembling %s **\n", argv[1]);
 
     char line[512];
     char mnemonic[16];
     char operand_str[100];
-    int  operand = 0;
+    char label_name[MAX_LABEL_LEN];
 
-    MnemonicMap *map_entry = NULL;
+    fprintf(stdout, "  Pass 1: Building symbol table...\n");
 
-    fprintf(stdout, "** Assembling %s **\n", argv[1]);
+    word_t current_address = CODE_START;
+    int data_mode = 0; // CODE = 0, DATA = 1
 
-    // Time to build the memory image.
     while(fgets(line, sizeof(line), input))
     {
-        // # = comments, so we forget about them.
-        // Okay, ';' will also be considered a token for comments.
-        char *hash_comment = strchr(line, '#');
-        char *semicolon_comment = strchr(line, ';');
+        char* p = clean_line(line);
+        if (!p) { continue; } // Skip empty/comment lines
 
-        char *comment_start = NULL;
-
-        if (hash_comment && semicolon_comment)
-        {
-            comment_start = (hash_comment < semicolon_comment) ? hash_comment : semicolon_comment;
-        } 
-        else if (hash_comment)
-        {
-            comment_start = hash_comment;
-        }
-        else if (semicolon_comment)
-        {
-            comment_start = semicolon_comment;
-        }
-        if (comment_start)
-        {
-            *comment_start = '\0';
-        }
-
-        char *p = line;
-
-        // Time to manage the labels (LABEL:)
+        // Check for labels
         char *label_end = strchr(p, ':');
         if (label_end)
         {
-            // If there's a label, we start parsing AFTER the ':'
+            size_t label_len = label_end - p;
+            if (label_len >= MAX_LABEL_LEN)
+            {
+                fprintf(stderr, "Error: Label is too long at 0x%04X\n", current_address);
+                status = EXIT_FAILURE;
+                label_len = MAX_LABEL_LEN - 1;
+            }
+            strncpy(label_name, p, label_len);
+            label_name[label_len] = '\0';
+            
+            // Add symbol to table
+            add_symbol(label_name, current_address);
+
             p = label_end + 1;
+            while (*p && isspace(*p)) { p++; }
+            if ('\0' == *p) { continue; }
         }
 
-        // We don't care about spaces.
-        while (*p && isspace(*p))
-        {
-            p++;
-        }
-
-        if ('\0' == *p)
-        {
-            continue;
-        }
-
-        // Parse the mnemonic and the operand.
         int fields = sscanf(p, "%15s %99s", mnemonic, operand_str);
-
-        if (fields < 1)
-        {
-            continue;
-        }
-
-        // So, you can use different bases.
-        // By default you can use decimal, hexadecimal and octal.
-        // Binary is not a default format, so that is why this exists.
-        // Pretty trivial, strtol does the magic.
-        // https://man7.org/linux/man-pages/man3/strtol.3.html
-        if (2 == fields)
-        {
-            if (0 == strncmp(operand_str, "0b", 2))
-            {
-                operand = (int)strtol(operand_str + 2, NULL, 2);
-            }
-            else
-            {
-                operand = (int)strtol(operand_str, NULL, 0);
-            }
-        }
+        if (fields < 1) { continue; }
 
         if (0 == strcmp(mnemonic, ".DATA"))
         {
             data_mode = 1;
-            REGS.BR = current_address;
+            if (0 == data_section_start_address)
+            {
+                data_section_start_address = current_address;
+            }
             continue;
         }
         else if (0 == strcmp(mnemonic, ".CODE"))
@@ -203,9 +235,98 @@ int main(int argc, char **argv)
             data_mode = 0;
             continue;
         }
+
+        // Increment address based on what we're parsing
         if (1 == data_mode)
         {
-            // The data...
+            if (0 == strcmp(mnemonic, ".WORD"))
+            {
+                current_address++;
+            }
+            else if (0 == strcmp(mnemonic, ".STRING"))
+            {
+                char *start_quote = strchr(p, '"');
+                if (!start_quote) {
+                    fprintf(stderr, "Error: .STRING missing opening quote.\n");
+                    status = EXIT_FAILURE;
+                    break;
+                }
+                start_quote++;
+                char *end_quote = strchr(start_quote, '"');
+                if (!end_quote) {
+                    fprintf(stderr, "Error: .STRING missing closing quote.\n");
+                    status = EXIT_FAILURE;
+                    break;
+                }
+                *end_quote = '\0';
+                
+                // Calculate words used
+                size_t len = strlen(start_quote);
+                word_t words_used = 1 + (len + 1) / 2; // +1 for length, +1/2 for packed chars
+                current_address += words_used;
+            }
+        } 
+    else // CODE section
+        {
+            // All instructions are 1 word
+            current_address++;
+        }
+    }
+
+    // Check for errors from pass 1
+    if (EXIT_FAILURE == status)
+    {
+        fprintf(stderr, "Errors found during Pass 1. Assembly halted.\n");
+        fclose(input);
+        return EXIT_FAILURE;
+    }
+
+    REGS.BR = data_section_start_address;
+    if (0 == REGS.BR)
+    {
+        REGS.BR = current_address; // No .DATA section, so set BR to end of code
+    }
+
+    fprintf(stdout, "  Pass 2: Generating machine code...\n");
+
+    rewind(input);
+    current_address = CODE_START;
+    data_mode = 0;
+    word_t max_address_written = 0;
+    MnemonicMap *map_entry = NULL;
+    int operand = 0;
+
+    while(fgets(line, sizeof(line), input))
+    {
+        char* p = clean_line(line);
+        if (!p) { continue; }
+
+        // Skip label definitions, we just care about code/data
+        char *label_end = strchr(p, ':');
+        if (label_end)
+        {
+            p = label_end + 1;
+            while (*p && isspace(*p)) { p++; }
+            if ('\0' == *p) { continue; }
+        }
+
+        int fields = sscanf(p, "%15s %99s", mnemonic, operand_str);
+        if (fields < 1) { continue; }
+
+        if (0 == strcmp(mnemonic, ".DATA"))
+        {
+            data_mode = 1;
+            continue;
+        }
+        else if (0 == strcmp(mnemonic, ".CODE"))
+        {
+            data_mode = 0;
+            continue;
+        }
+
+        // Handle DATA section
+        if (1 == data_mode)
+        {
             if (0 == strcmp(mnemonic, ".WORD"))
             {
                 if (fields < 2)
@@ -214,42 +335,20 @@ int main(int argc, char **argv)
                     status = EXIT_FAILURE;
                     break;
                 }
-
+                operand = (int)strtol(operand_str, NULL, 0); // Handles decimal, 0x, etc.
                 MEMORY[current_address++] = (word_t)operand;
-                
-                if (current_address > max_address_written)
-                {
-                    max_address_written = current_address;
-                }
-
             }
             else if (0 == strcmp(mnemonic, ".STRING"))
             {
-                char *start_quote = strchr(p, '"'); // We search the " after the mnemonic .STRING
-                if (!start_quote)
-                {
-                    fprintf(stderr, "Error: .STRING missing opening quote.\n");
-                    status = EXIT_FAILURE;
-                    break;
-                }
+                char *start_quote = strchr(p, '"');
+                if (!start_quote) { /* error already caught in pass 1 */ break; }
                 start_quote++;
                 char *end_quote = strchr(start_quote, '"');
-                if (!end_quote)
-                {
-                    fprintf(stderr, "Error: .STRING missing closing quote.\n");
-                    status = EXIT_FAILURE;
-                    break;
-                }
+                if (!end_quote) { /* error already caught in pass 1 */ break; }
                 *end_quote = '\0'; 
                 
                 word_t words_used = str_pack(start_quote, current_address);
-
                 current_address += words_used;
-
-                if (current_address > max_address_written)
-                {
-                    max_address_written = current_address;
-                }
             }
             else
             {
@@ -257,20 +356,23 @@ int main(int argc, char **argv)
                 status = EXIT_FAILURE;
                 break;
             }
-        } 
-        else
-        {
-            // The instructions...
-            word_t instruction_word = 0;
             
-            map_entry = NULL;
-
-            // We search the lookup table.
-            for (size_t i = 0; i < INSTRUCTION_COUNT; ++i)
+            if (current_address > max_address_written)
             {
-                if (0 == strcmp(mnemonic, INSTRUCTION_MAP[i].mnemonic))
-                {
+                max_address_written = current_address;
+            }
+        } 
+        else // Handle CODE section
+        {
+            word_t instruction_word = 0;
+            map_entry = NULL;
+            operand = 0; // Reset operand
+
+            // Find instruction in map
+            for (size_t i = 0; i < INSTRUCTION_COUNT; ++i) {
+                if (0 == strcmp(mnemonic, INSTRUCTION_MAP[i].mnemonic)) {
                     map_entry = (MnemonicMap *)&INSTRUCTION_MAP[i];
+                    break;
                 }
             }
 
@@ -278,59 +380,106 @@ int main(int argc, char **argv)
             {
                 fprintf(stderr, "Error: Unknown instruction mnemonic '%s' at address 0x%04X\n", mnemonic, current_address);
                 status = EXIT_FAILURE;
-                instruction_word = encode_format1(OP_ILLEGAL, 0); 
+                instruction_word = encode_format1(OP_ILLEGAL, 0);
             }
             else
             {
+                // Resolve operand if required
                 if (map_entry->requires_operand)
                 {
-                    // Operand is required (TYPE_FORMAT2).
-                    if (fields < 2) 
-                    {
-                        // Error: missing operand.
+                    if (fields < 2) {
                         fprintf(stderr, "Error: Instruction %s missing operand at address 0x%04X\n", mnemonic, current_address);
                         status = EXIT_FAILURE;
                         instruction_word = encode_format1(OP_ILLEGAL, 0); 
-                    }  
+                    } 
                     else 
                     {
-                        // Warning for 12-bit truncation (user requested change).
-                        // Range checked: [-2048, 4095] to cover both signed and unsigned 12-bit limits.
-                        if (operand > 4095 || operand < -2048)
-                        {
-                            word_t truncated_operand = ((word_t)operand) & 0x0FFF;
-                            fprintf(stderr, "Warning: Operand value '%d' for instruction '%s' at address 0x%04X exceeds 12-bit range. It will be truncated to %u (0x%03X).\n",
-                                    operand, mnemonic, current_address, truncated_operand, truncated_operand);                        }
+                        // Check if operand is a number or a label
+                        char *endptr;
+                        errno = 0;
+                        operand = (int)strtol(operand_str, &endptr, 0);
+
+                        if (errno == ERANGE || (*endptr != '\0' && !isspace(*endptr))) 
+                        { 
+                            // Not a simple number, try binary or label
+                            if (0 == strncmp(operand_str, "0b", 2))
+                            {
+                                operand = (int)strtol(operand_str + 2, NULL, 2);
+                            }
+                            else // Must be a label then
+                            {
+                                Symbol* sym = find_symbol(operand_str);
+                                if (!sym) 
+                                {
+                                    fprintf(stderr, "Error: Undefined label '%s' at address 0x%04X\n", operand_str, current_address);
+                                    status = EXIT_FAILURE;
+                                    instruction_word = encode_format1(OP_ILLEGAL, 0);
+                                } 
+                                else 
+                                {
+                                    if (OP_JMP == map_entry->opcode || OP_JAL == map_entry->opcode)
+                                    {
+                                        // PC-relative: operand = target_addr - (current_addr + 1)
+                                        operand = (int)sym->address - (int)current_address - 1;
+                                    }
+                                    else if (OP_LDI == map_entry->opcode || OP_LOAD == map_entry->opcode || OP_STORE == map_entry->opcode)
+                                    {
+                                        // BR-relative: operand = target_addr - br_addr
+                                        if (sym->address < REGS.BR) 
+                                        {
+                                            fprintf(stderr, "Warning: Data instruction '%s' references code label '%s' at 0x%04X. Using absolute address.\n", 
+                                                mnemonic, operand_str, current_address);
+                                            operand = (int)sym->address; // Fallback to absolute
+                                        }
+                                        else
+                                        {
+                                            operand = (int)sym->address - (int)REGS.BR;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        fprintf(stderr, "Error: Label '%s' used with non-data/non-jump instruction '%s' at 0x%04X\n", operand_str, mnemonic, current_address);
+                                        status = EXIT_FAILURE;
+                                        instruction_word = encode_format1(OP_ILLEGAL, 0);
+                                    }
+                                }
+                            }
+                        }
                         
-                        // Encoding time!
-                        instruction_word = encode_format2(map_entry->opcode, operand); 
+                        if (0 == instruction_word)
+                        {
+                            // Warning for 12-bit truncation
+                            if (operand > 4095 || operand < -2048)
+                            {
+                                word_t truncated_operand = ((word_t)operand) & 0x0FFF;
+                                fprintf(stderr, "Warning: Operand value '%d' for instruction '%s' at address 0x%04X exceeds 12-bit range. It will be truncated to %u (0x%03X).\n",
+                                        operand, mnemonic, current_address, truncated_operand, truncated_operand);
+                            }
+                            instruction_word = encode_format2(map_entry->opcode, operand);
+                        }
                     }
                 }
-                else // Operand not required (TYPE_FORMAT1, TYPE_NO_FUNC).
+                else // Operand not required
                 {
-                    if (fields >= 2) 
+                    if (fields >= 2)
                     {
-                        // Warning for extraneous operand.
-                        fprintf(stderr, "Warning: Operand '%d' for instruction '%s' at address 0x%04X will be ignored.\n", operand, mnemonic, current_address);
+                        fprintf(stderr, "Warning: Operand '%s' for instruction '%s' at address 0x%04X will be ignored.\n",
+                                operand_str, mnemonic, current_address);
                     }
                     
-                    // Encoding time...
                     switch (map_entry->type) 
                     {
                         case TYPE_FORMAT1:
                             instruction_word = encode_format1(map_entry->opcode, map_entry->func_code);
                             break;
-                        case TYPE_FORMAT2:
-                            // Should not happen as requires_operand is 0.
-                            instruction_word = encode_format1(OP_ILLEGAL, 0); 
-                            break;
+                        case TYPE_FORMAT2: // Should not happen
                         case TYPE_NO_FUNC:
-                            // FUNC is 0 for HALT and RET
                             instruction_word = encode_format1(map_entry->opcode, 0); 
                             break;
                     }
                 }
             }
+            
             MEMORY[current_address++] = instruction_word;
 
             if (current_address > max_address_written)
@@ -340,20 +489,28 @@ int main(int argc, char **argv)
         }
     }
 
-    // The second pass is to write the binary output.
-
-    // TODO: Add error checking.
+    if (EXIT_FAILURE == status)
+    {
+        fprintf(stderr, "Errors found during Pass 2. Assembly halted.\n");
+        fclose(input);
+        return EXIT_FAILURE;
+    }
 
     // This allows the simulator to know where the data section starts.
     MEMORY[0x0000] = REGS.BR; 
 
     word_t total_words_used = max_address_written;
-
-    // We ensure 0x0000 is included even if no code/data was written
     if (total_words_used < 1)
     {
         total_words_used = 1;
     }
+    
+    // Fallback if no .DATA section was ever defined
+    if (total_words_used < current_address)
+    {
+        total_words_used = current_address;
+    }
+
 
     FILE *output = fopen("a.out.bin", "wb");
     if (!output)

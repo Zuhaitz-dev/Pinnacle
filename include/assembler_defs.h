@@ -18,4 +18,12 @@ typedef struct
     int requires_operand;   // 1 if fields < 2 is an error, 0 otherwise.
 } MnemonicMap;
 
+#define MAX_SYMBOLS 1024
+#define MAX_LABEL_LEN 100
+
+typedef struct {
+    char name[MAX_LABEL_LEN];
+    word_t address;
+} Symbol;
+
 #endif
