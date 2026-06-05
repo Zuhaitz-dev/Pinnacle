@@ -134,10 +134,12 @@ enum AluFuncs
 
 enum StackOpsFuncs
 {
-    FUNC_SWAP = 0x000,
-    FUNC_DUP  = 0x001,
-    FUNC_DROP = 0x002,
-    FUNC_OVER = 0x003
+    FUNC_SWAP   = 0x000,
+    FUNC_DUP    = 0x001,
+    FUNC_DROP   = 0x002,
+    FUNC_OVER   = 0x003,
+    FUNC_LOADI  = 0x004,
+    FUNC_STOREI = 0x005
 };
 
 enum BranchFuncs

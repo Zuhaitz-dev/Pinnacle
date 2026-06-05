@@ -32,6 +32,8 @@ const MnemonicMap INSTRUCTION_MAP[] = {
     {"DUP",  TYPE_FORMAT1, OP_STACK_OPS, FUNC_DUP,  0},
     {"DROP", TYPE_FORMAT1, OP_STACK_OPS, FUNC_DROP, 0},
     {"OVER", TYPE_FORMAT1, OP_STACK_OPS, FUNC_OVER, 0},
+    {"LOADI",  TYPE_FORMAT1, OP_STACK_OPS, FUNC_LOADI,  0},
+    {"STOREI", TYPE_FORMAT1, OP_STACK_OPS, FUNC_STOREI, 0},
     // BRANCH (Format 1, uses FUNC_ code, no operand check needed).
     {"BEQ", TYPE_FORMAT1, OP_BRANCH, FUNC_BEQ, 0},
     {"BNE", TYPE_FORMAT1, OP_BRANCH, FUNC_BNE, 0},
@@ -335,7 +337,34 @@ int main(int argc, char **argv)
                     status = EXIT_FAILURE;
                     break;
                 }
-                operand = (int)strtol(operand_str, NULL, 0); // Handles decimal, 0x, etc.
+                
+                char *endptr;
+                errno = 0;
+                operand = (int)strtol(operand_str, &endptr, 0);
+
+                if (errno == ERANGE || (*endptr != '\0' && !isspace(*endptr))) 
+                {
+                    // Not a number, try to resolve as a label.
+                    Symbol* sym = find_symbol(operand_str);
+                    if (!sym) 
+                    {
+                        fprintf(stderr, "Error: Undefined label '%s' in .WORD at 0x%04X\n", operand_str, current_address);
+                        status = EXIT_FAILURE;
+                        operand = 0;
+                    } 
+                    else 
+                    {
+                        // Calculate offset relative to BR for pointers.
+                        if (sym->address >= REGS.BR) 
+                        {
+                            operand = (int)sym->address - (int)REGS.BR;
+                        } 
+                        else 
+                        {
+                            operand = (int)sym->address; // absolute fallback.
+                        }
+                    }
+                }
                 MEMORY[current_address++] = (word_t)operand;
             }
             else if (0 == strcmp(mnemonic, ".STRING"))

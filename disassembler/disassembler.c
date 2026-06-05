@@ -34,8 +34,9 @@ const char* alu_map[] = {
 };
 
 const char* stack_op_map[] = {
-    [FUNC_SWAP] = "SWAP", [FUNC_DUP]  = "DUP",
-    [FUNC_DROP] = "DROP", [FUNC_OVER] = "OVER"
+    [FUNC_SWAP]   = "SWAP",  [FUNC_DUP]    = "DUP",
+    [FUNC_DROP]   = "DROP",  [FUNC_OVER]   = "OVER",
+    [FUNC_LOADI]  = "LOADI", [FUNC_STOREI] = "STOREI"
 };
 
 const char* branch_map[] = {

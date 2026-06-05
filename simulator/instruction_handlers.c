@@ -142,6 +142,23 @@ void execute_stack_op(int func_code)
             MEMORY[--REGS.SP] = w_nos;
             break;
 
+        case FUNC_LOADI:
+        {
+            CHECK_SP_UNDERFLOW(1);
+            word_t ea = REGS.BR + w_tos; 
+            MEMORY[REGS.SP] = MEMORY[ea];
+            break;
+        }
+
+        case FUNC_STOREI:
+        {
+            CHECK_SP_UNDERFLOW(2);
+            word_t ea = REGS.BR + w_tos;
+            MEMORY[ea] = w_nos;
+            REGS.SP += 2;
+            break;
+        }
+
         default:
             fprintf(stderr, "Unknown stack func 0x%X\n", func_code);
             CLOSE_LOG();
